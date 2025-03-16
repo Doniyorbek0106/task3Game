@@ -1,6 +1,10 @@
 const crypto = require("crypto");
 const readline = require("readline");
 
+function generateHMAC(key, message) {
+  return crypto.createHmac("sha256", key).update(message).digest("hex");
+}
+
 function validateDice(diceList) {
   if (diceList.length < 3) {
     return "Error: You must provide at least three dice. Example: node game.js 4,5,6,7,8,9 10,11,12,13,14,15 16,17,18,19,20,4";
@@ -16,13 +20,15 @@ function validateDice(diceList) {
 
 function fairCoinFlip() {
   const seed = Math.floor(Math.random() * 1000000).toString();
-  const hash = crypto.createHash("sha256").update(seed).digest("hex");
-  console.log(`Coin flip hash: ${hash}`);
+  const key = crypto.randomBytes(16).toString("hex");
+  const hmac = generateHMAC(key, seed);
+  console.log(`Coin flip HMAC: ${hmac}`);
   return new Promise((resolve) => {
     readline
       .createInterface({ input: process.stdin, output: process.stdout })
       .question("Press Enter to reveal the result...", () => {
         console.log(`Seed: ${seed}`);
+        console.log(`Key: ${key}`);
         resolve(parseInt(seed) % 2 === 0);
       });
   });
