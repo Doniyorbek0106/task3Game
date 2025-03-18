@@ -1,113 +1,78 @@
 const crypto = require("crypto");
-const readline = require("readline");
+const readlineSync = require("readline-sync");
 
-function generateHMAC(key, message) {
-  return crypto.createHmac("sha256", key).update(message).digest("hex");
+function createHMAC(secret, message) {
+  return crypto.createHmac("sha256", secret).update(message).digest("hex");
 }
 
-function validateDice(diceList) {
-  if (diceList.length < 3) {
-    return "Error: You must provide at least three dice. Example: node game.js 4,5,6,7,8,9 10,11,12,13,14,15 16,17,18,19,20,4";
+function checkDiceSets(diceSets) {
+  if (diceSets.length < 3) {
+    return "Error: Provide at least three dice sets.";
   }
-  for (const dice of diceList) {
-    const faces = dice.split(",").map((num) => num.trim());
-    if (faces.length !== 6 || faces.some((face) => !face || isNaN(face))) {
-      return `Error: Invalid dice format "${dice}". Each dice must have exactly 6 valid integers.`;
+  for (const set of diceSets) {
+    let values = set.split(",").map((n) => n.trim());
+    if (values.length !== 6 || values.some((n) => isNaN(n))) {
+      return `Error: Invalid dice set "${set}". Each set must have exactly 6 numbers.`;
     }
   }
   return null;
-}
-
-function fairCoinFlip() {
-  const seed = Math.floor(Math.random() * 1000000).toString();
-  const key = crypto.randomBytes(16).toString("hex");
-  const hmac = generateHMAC(key, seed);
-  console.log(`Coin flip HMAC: ${hmac}`);
-  return new Promise((resolve) => {
-    readline
-      .createInterface({ input: process.stdin, output: process.stdout })
-      .question("Press Enter to reveal the result...", () => {
-        console.log(`Seed: ${seed}`);
-        console.log(`Key: ${key}`);
-        resolve(parseInt(seed) % 2 === 0);
-      });
-  });
 }
 
 function rollDice(dice) {
   return dice[Math.floor(Math.random() * dice.length)];
 }
 
-function userChooseDice(diceList) {
-  return new Promise((resolve) => {
-    console.log("Select your dice:");
-    diceList.forEach((dice, i) => console.log(`${i + 1}. ${dice}`));
-    console.log("0. Exit");
+function chooseDice(diceSets) {
+  console.log("Choose your dice set:");
+  diceSets.forEach((set, i) => console.log(`${i + 1}. ${set}`));
+  console.log("0. Exit");
 
-    const rl = readline.createInterface({
-      input: process.stdin,
-      output: process.stdout,
-    });
-    rl.question("Your choice: ", (choice) => {
-      rl.close();
-      const index = parseInt(choice) - 1;
-      if (choice === "0") process.exit(0);
-      if (!isNaN(index) && index >= 0 && index < diceList.length) {
-        resolve(diceList[index].split(",").map(Number));
-      } else {
-        console.log("Invalid choice. Try again.");
-        resolve(userChooseDice(diceList));
-      }
-    });
-  });
+  while (true) {
+    let choice = readlineSync.question("Your choice: ");
+    let index = parseInt(choice) - 1;
+    if (choice === "0") process.exit(0);
+    if (!isNaN(index) && index >= 0 && index < diceSets.length) {
+      return diceSets[index].split(",").map(Number);
+    }
+    console.log("Invalid choice. Try again.");
+  }
 }
 
-async function main() {
+function startGame() {
   const args = process.argv.slice(2);
-  const error = validateDice(args);
+  const error = checkDiceSets(args);
   if (error) {
     console.log(error);
     process.exit(1);
   }
 
   console.log("Welcome to the Dice Game!");
-  const userFirst = await fairCoinFlip();
-  console.log(userFirst ? "You go first!" : "Computer goes first!");
 
-  const userDice = await userChooseDice(args);
-  const computerDice = args
-    .filter((d) => d !== userDice.join(","))
-    .map((d) => d.split(",").map(Number))[
-    Math.floor(Math.random() * (args.length - 1))
-  ];
+  const secret = crypto.randomBytes(16).toString("hex");
+  const computerDice = args[Math.floor(Math.random() * args.length)]
+    .split(",")
+    .map(Number);
+  const computerRoll = rollDice(computerDice);
+  const hmac = createHMAC(secret, computerRoll.toString());
 
-  console.log(`Your dice: ${userDice}`);
-  console.log(`Computer dice: ${computerDice}`);
+  console.log(`HMAC: ${hmac}`);
 
-  let userRoll, computerRoll;
-  if (userFirst) {
-    console.log("Press Enter to roll...");
-    await new Promise((resolve) =>
-      readline
-        .createInterface({ input: process.stdin, output: process.stdout })
-        .question("", () => resolve())
-    );
-    userRoll = rollDice(userDice);
-    console.log(`You rolled: ${userRoll}`);
-  }
+  const userDice = chooseDice(args);
 
-  computerRoll = rollDice(computerDice);
+  console.log("Press Enter to roll your dice...");
+  readlineSync.question("");
+  const userRoll = rollDice(userDice);
+  console.log(`You rolled: ${userRoll}`);
+
   console.log(`Computer rolled: ${computerRoll}`);
+  console.log(`Secret: ${secret}`);
 
-  if (!userFirst) {
-    console.log("Press Enter to roll...");
-    await new Promise((resolve) =>
-      readline
-        .createInterface({ input: process.stdin, output: process.stdout })
-        .question("", () => resolve())
-    );
-    userRoll = rollDice(userDice);
-    console.log(`You rolled: ${userRoll}`);
+  const computedHMAC = createHMAC(secret, computerRoll.toString());
+  if (computedHMAC !== hmac) {
+    console.log("Error: HMAC does not match! Cheating detected.");
+    process.exit(1);
+  } else {
+    console.log("HMAC verification passed! The game was fair.");
   }
 
   if (userRoll > computerRoll) console.log("You win!");
@@ -115,4 +80,4 @@ async function main() {
   else console.log("It's a tie!");
 }
 
-main();
+startGame();
