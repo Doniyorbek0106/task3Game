@@ -14,6 +14,7 @@ function checkDiceSets(diceSets) {
     if (values.length !== 6 || values.some((n) => isNaN(n))) {
       return `Error: Invalid dice set "${set}". Each set must have exactly 6 numbers.`;
     }
+    
   }
   return null;
 }
